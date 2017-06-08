@@ -63,11 +63,12 @@ class ConfigurationRules(TransactionCase):
         config_variants = self.env['product.product'].search([
             ('config_ok', '=', True)
         ])
+        existing_lines = self.so.order_line
 
         # Start a new configuration wizard
         wizard_obj = self.env['product.configurator'].with_context({
             'active_model': 'sale.order',
-            'active_id': self.so.id
+            'default_order_id': self.so.id
         })
 
         wizard = wizard_obj.create({'product_tmpl_id': self.cfg_tmpl.id})
@@ -103,6 +104,10 @@ class ConfigurationRules(TransactionCase):
 
         self.assertTrue(len(new_config_variants - config_variants) == 1,
                         "Wizard did not create a configurable variant")
+
+        created_line = self.so.order_line - existing_lines
+        self.assertTrue(len(created_line) == 1,
+                        "Wizard did not create an order line")
 
     def do_reconfigure(self, order_line, attr_vals):
         reconfig_action = order_line.reconfigure_product()
