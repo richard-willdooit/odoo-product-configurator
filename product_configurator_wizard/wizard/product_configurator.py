@@ -143,6 +143,8 @@ class ProductConfigurator(models.TransientModel):
         """Generate a dictionary to return new values via onchange method.
         Domains hold the values available, this method enforces these values
         if a selection exists in the view that is not available anymore.
+        Also, if there are values blanked out by this, then try and see if
+        there is an available default.
 
         :param dynamic_fields: Dictionary with the current {dynamic_field: val}
         :param domains: Odoo domains restricting attribute values
@@ -153,6 +155,11 @@ class ProductConfigurator(models.TransientModel):
 
         dynamic_fields = dynamic_fields.copy()
 
+        # validate and eliminate values, and set defaults if they are on the
+        # current step
+        step_val_ids = cfg_step and \
+            cfg_step.attribute_line_ids.mapped('value_ids').ids or \
+            self.product_tmpl_id.attribute_line_ids.mapped('value_ids').ids
         for k, v in dynamic_fields.iteritems():
             attribute_id = int(k.replace(self.field_prefix, ''))
             attribute_line = self.product_tmpl_id.attribute_line_ids.filtered(
@@ -163,9 +170,16 @@ class ProductConfigurator(models.TransientModel):
                 self.get_support_fields(k, available_val_ids, attribute_line)
             )
 
-            if v and isinstance(v, list):
+            # Get this fresh every time as the loop can change the values as
+            # it goes!
+            config_val_ids = [dfv for dfv in dynamic_fields.values()
+                              if dfv and not isinstance(dfv, list)]
+            for list_dfv in [dfv for dfv in dynamic_fields.values()
+                             if dfv and isinstance(dfv, list)]:
+                config_val_ids.extend(list_dfv[0][2])
+            if isinstance(v, list):
                 value_ids = list(set(v[0][2]) & set(available_val_ids))
-                dynamic_fields.update({k: value_ids})
+                dynamic_fields[k] = [[6, 0, value_ids]]
                 vals[k] = [[6, 0, value_ids]]
             elif v and v not in available_val_ids:
                 dynamic_fields.update({k: None})
@@ -176,9 +190,24 @@ class ProductConfigurator(models.TransientModel):
                         len(available_val_ids) == 1:
                     dynamic_fields.update({k: available_val_ids[0]})
                     vals[k] = available_val_ids[0]
+                else:
+                    # if the value currently is blank and on the current step,
+                    # see if one can be set
+                    if set(available_val_ids) & set(step_val_ids):
+                        def_value_id = self.product_tmpl_id.find_default_value(
+                            available_val_ids, config_val_ids
+                        )
+                        if def_value_id:
+                            dynamic_fields.update({k: def_value_id})
+                            vals[k] = def_value_id
 
+        config_val_ids = [dfv for dfv in dynamic_fields.values()
+                          if dfv and not isinstance(dfv, list)]
+        for list_dfv in [dfv for dfv in dynamic_fields.values()
+                         if dfv and isinstance(dfv, list)]:
+            config_val_ids.extend(list_dfv[0][2])
         product_img = self.product_tmpl_id.get_config_image_obj(
-            dynamic_fields.values())
+            config_val_ids)
 
         vals.update(product_img=product_img.image)
 
@@ -347,6 +376,8 @@ class ProductConfigurator(models.TransientModel):
 #             # If no configuration steps exist then get all attribute lines
 #             attribute_lines = wiz.product_tmpl_id.attribute_line_ids
 
+        # TODO: If last block is attempting to be clever, this next
+        # line is ignoring it.  Need to determine what is best.
         attribute_lines = wiz.product_tmpl_id.attribute_line_ids
 
         # Generate relational fields with domains restricting values to
