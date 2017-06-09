@@ -177,7 +177,7 @@ class ProductConfigurator(models.TransientModel):
             for list_dfv in [dfv for dfv in dynamic_fields.values()
                              if dfv and isinstance(dfv, list)]:
                 config_val_ids.extend(list_dfv[0][2])
-            if isinstance(v, list):
+            if v and isinstance(v, list):
                 value_ids = list(set(v[0][2]) & set(available_val_ids))
                 dynamic_fields[k] = [[6, 0, value_ids]]
                 vals[k] = [[6, 0, value_ids]]
