@@ -9,6 +9,7 @@ class SaleOrderLine(models.Model):
     config_ok = fields.Boolean(
         related='product_id.config_ok',
         string="Configurable"
+        readonly=True,
     )
 
     @api.multi
