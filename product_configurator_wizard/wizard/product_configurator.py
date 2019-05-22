@@ -2,6 +2,7 @@
 
 from lxml import etree
 import ast
+import time
 
 from odoo.osv import orm
 from odoo import models, fields, api, _
@@ -363,7 +364,7 @@ class ProductConfigurator(models.TransientModel):
         wiz = self.browse(wizard_id)
 
         # If the product template is not set it is still at the 1st step
-        if not wiz.product_tmpl_id:
+        if not wiz.product_tmpl_id or wiz.state == 'select':
             return res
 
         # At the moment, this is not being used, so let's not call it
@@ -463,6 +464,9 @@ class ProductConfigurator(models.TransientModel):
                 type='boolean',
             )
 
+        if 'fg_res' in self.env.context and not self.env.context['fg_res']:
+            self.env.context['fg_res'].clear()
+            self.env.context['fg_res'].update(res)
         return res
 
     @api.model
@@ -470,7 +474,8 @@ class ProductConfigurator(models.TransientModel):
                         toolbar=False, submenu=False):
         """ Generate view dynamically using attributes stored on the
         product.template"""
-        res = super(ProductConfigurator, self).fields_view_get(
+        fg_res = {}
+        res = super(ProductConfigurator, self.with_context(ts=time.time(),fg_res=fg_res)).fields_view_get(
             view_id=view_id, view_type=view_type,
             toolbar=toolbar, submenu=submenu
         )
@@ -483,7 +488,7 @@ class ProductConfigurator(models.TransientModel):
         wiz = self.browse(wizard_id)
 
         # Get updated fields including the dynamic ones
-        fields = self.fields_get()
+        fields = fg_res and self.fields_get()
         dynamic_fields = {
             k: v for k, v in fields.iteritems() if k.startswith(
                 self.field_prefix) or k.startswith(self.custom_field_prefix)
